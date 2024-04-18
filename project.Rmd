@@ -1,0 +1,123 @@
+---
+title: "project2020"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(haven)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
+data_wave_1 <- read_dta('dataset/FFdata/wave1/FF_wave1_2020v2.dta')
+
+wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_con", "f2g5", "f2g5a", "cf2age", "cm2fbir", "cf2edu", 
+                          "cm2edu", "f2g7b", "f2h7a", "m2c33", "f2l1", "cm2md_case_con", "cm2md_case_lib", "cf2marm", 
+                          "cf2cohm", "f2b1", "f2b1a", "f2b2", "f2b3")]
+wave_1_filtered <- data_wave_1[, c("idnum", "m1h3", "m1h3a")]
+
+combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum")
+
+#exclue -9 in cf2md_case_con
+combined_data <- combined_data %>%
+  filter(cf2md_case_con != -9 & cf2md_case_con != -3)
+head(combined_data)
+```
+```{r}
+summary(combined_data)
+```
+
+
+```{r}
+# check missing data
+sum(is.na(filtered_data))
+```
+
+```{r}
+# Father Depression Variable
+filtered_cf2md_case_con <- combined_data$cf2md_case_con
+depression_frequencies <- table(filtered_cf2md_case_con)
+barplot(depression_frequencies, main = "Histogram of Father's Depression", xlab = "Depression", ylab = "Frequency", names.arg = c(0, 1), ylim = c(0, max(depression_frequencies)))
+```
+
+```{r}
+race_labels <- c( "-6 Skip", "-5 Not asked", "-3 Missing", "-2 Don't know", "-1 Refuse", "1 White", "2 Blck", "3 Asian", "4 AmInd", "5 Other", "101 Hispanic") 
+combined_data$f2g5_factor <- factor(combined_data$f2g5, labels = race_labels)
+
+f2g5_factor_frequencies <- table(combined_data$f2g5_factor)
+
+par(mar = c(7, 4, 4, 2) + 0.1)
+
+barplot(f2g5_factor_frequencies, main = "Bar Plot of Father's Race", 
+         ylab = "Frequency", 
+        las = 2, cex.names = 0.7)
+title(xlab = "Race Categories", line = 6)
+
+par(mar = c(5, 4, 4, 2) + 0.1)
+```
+
+```{r}
+valid_ages <- combined_data$cf2age[combined_data$cf2age > 0]
+hist(valid_ages, main = "Histogram of Father's Age", xlab = "Age", breaks = 30)
+```
+
+```{r}
+cleaned_data <- combined_data 
+education_levels <- c(-3, 1, 2, 3, 4)
+education_labels <- c("-3 Missing", "1 less HS", "2 HS or equiv", "3 Some coll, tech", "4 coll or grad")
+
+cleaned_data$cf2edu <- factor(cleaned_data$cf2edu, levels = education_levels, labels = education_labels)
+
+cleaned_data$cf2md_case_con <- factor(cleaned_data$cf2md_case_con, levels = c(0, 1))
+
+ggplot(cleaned_data, aes(x = cf2edu, fill = cf2md_case_con)) + 
+  geom_bar(position = "dodge") + 
+  labs(title = "Father's Education Level vs. Depression",
+       x = "Education Level",
+       y = "Count") + 
+  scale_fill_discrete(name = "Depression Status", labels = c("No Depression", "Depression")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+filtered_data <- combined_data %>%
+  filter(f2h7a %in% c(1, 2), !is.na(cf2md_case_con))
+
+filtered_data$f2h7a <- factor(filtered_data$f2h7a, levels = c(1, 2), labels = c("Yes", "No"))
+filtered_data$cf2md_case_con <- factor(filtered_data$cf2md_case_con, levels = c(0, 1))
+
+ggplot(filtered_data, aes(x = f2h7a, fill = cf2md_case_con)) + 
+  geom_bar(position = "dodge") + 
+  labs(title = "Assistance from Employment/Welfare Agency vs. Depression",
+       x = "Assistance Received",
+       y = "Count") + 
+  scale_fill_discrete(name = "Depression Status", labels = c("No Depression", "Depression")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+filtered_data <- combined_data %>%
+  filter(f2b1a %in% c(1, 2), !is.na(cf2md_case_con))
+
+filtered_data$f2b1a <- factor(filtered_data$f2b1a, levels = c(1, 2), labels = c("Yes", "No"))
+
+filtered_data$cf2md_case_con <- factor(filtered_data$cf2md_case_con, levels = c(0, 1))
+
+ggplot(filtered_data, aes(x = f2b1a, fill = cf2md_case_con)) + 
+  geom_bar(position = "dodge") + 
+  labs(title = "Parental Cohabitation vs. Depression",
+       x = "Do Mother and Father Live Together?",
+       y = "Count") + 
+  scale_fill_discrete(name = "Depression Status", labels = c("No Depression", "Depression")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
