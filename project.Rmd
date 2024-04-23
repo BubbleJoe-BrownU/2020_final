@@ -9,11 +9,12 @@ library(dplyr)
 library(ggplot2)
 ```
 ```{r}
-data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
-data_wave_1 <- read_dta('dataset/FFdata/wave1/FF_wave1_2020v2.dta')
+data_wave_2 <- read_dta('/Users/a123/Desktop/FFdata/wave2/FF_wave2_2020v2.dta')
+data_wave_1 <- read_dta('/Users/a123/Desktop/FFdata/wave1/FF_wave1_2020v2.dta')
 ```
 
 ```{r}
+
 
 wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_lib", "cf2age", "cm2fbir", "cf2edu", 
                           "cm2edu", "f2h7a", "m2c33", "cm2md_case_lib", "cf2marm", 
@@ -22,16 +23,14 @@ wave_1_filtered <- data_wave_1[, c("idnum", "m1h3", "m1h3a", "f1h3", "f1h3a")]
 
 combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum") 
 
+# in cf2marm, cf2cohm 0 = no)
 combined_data_filtered <- combined_data %>%
-  filter(cf2md_case_lib >= 0, cf2age >= 0, cm2fbir >= 0)
+  filter(cf2md_case_lib >= 0, cf2age >= 0, cm2fbir >= 0, cf2edu >= 0,
+         cm2edu >= 0, f2h7a >= 0, m2c33 >= 0, cm2md_case_lib >= 0, cf2marm >= 0,
+         cf2cohm >= 0, f2b1 >= 0, f2b1a >= 0, cf2povco >= 0,m1h3 >= 0,m1h3a >= 0,
+         f1h3 >= 0,f1h3a >= 0 )
+```
 
-# encode new category for categorical variable:
-
-
-
-# exclude all negative values:
-combined_data_filtered <- combined_data %>%
-  filter_all(all_vars(. >= 0 ))
 
 
 
@@ -40,6 +39,16 @@ summary(combined_data_filtered)
 table(combined_data_filtered$cf2md_case_lib)
 ```
 
+```{r}
+#changing values for m2c33, changing from 201 to 1 (working), 202 to 2(unemployed), 203 to 3( in jail)
+combined_data_filtered <- combined_data_filtered %>%
+  mutate(m2c33 = case_when(
+    m2c33 == 201 ~ 1,
+    m2c33 == 202 ~ 2,
+    m2c33 == 203 ~ 3,
+    TRUE ~ m2c33
+  ))
+```
 
 ```{r}
 # check missing data
