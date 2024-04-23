@@ -13,10 +13,10 @@ library(ggplot2)
 data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
 data_wave_1 <- read_dta('dataset/FFdata/wave1/FF_wave1_2020v2.dta')
 
-wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_con", "f2g5", "f2g5a", "cf2age", "cm2fbir", "cf2edu", 
+wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_con", "cf2age", "cm2fbir", "cf2edu", 
                           "cm2edu", "f2g7b", "f2h7a", "m2c33", "f2l1", "cm2md_case_con", "cm2md_case_lib", "cf2marm", 
                           "cf2cohm", "f2b1", "f2b1a", "f2b2", "f2b3")]
-wave_1_filtered <- data_wave_1[, c("idnum", "m1h3", "m1h3a")]
+wave_1_filtered <- data_wave_1[, c("idnum", "m1h3", "m1h3a", "f1h3", "f1h3a")]
 
 combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum")
 
@@ -32,7 +32,7 @@ summary(combined_data)
 
 ```{r}
 # check missing data
-sum(is.na(filtered_data))
+sum(is.na(combined_data))
 ```
 
 ```{r}
@@ -43,10 +43,10 @@ barplot(depression_frequencies, main = "Histogram of Father's Depression", xlab 
 ```
 
 ```{r}
-race_labels <- c( "-6 Skip", "-5 Not asked", "-3 Missing", "-2 Don't know", "-1 Refuse", "1 White", "2 Blck", "3 Asian", "4 AmInd", "5 Other", "101 Hispanic") 
-combined_data$f2g5_factor <- factor(combined_data$f2g5, labels = race_labels)
+race_labels <- c("-9 Not in wave", "-3 Missing", "-2 Don't know", "-1 Refuse", "1 White", "2 Blck", "3 Asian", "4 AmInd", "5 Other") 
+combined_data$f1h3_factor <- factor(combined_data$f1h3, labels = race_labels)
 
-f2g5_factor_frequencies <- table(combined_data$f2g5_factor)
+f2g5_factor_frequencies <- table(combined_data$f1h3_factor)
 
 par(mar = c(7, 4, 4, 2) + 0.1)
 
