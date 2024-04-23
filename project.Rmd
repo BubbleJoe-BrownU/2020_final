@@ -8,31 +8,42 @@ library(haven)
 library(dplyr)
 library(ggplot2)
 ```
-
 ```{r}
 data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
 data_wave_1 <- read_dta('dataset/FFdata/wave1/FF_wave1_2020v2.dta')
+```
 
-wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_con", "cf2age", "cm2fbir", "cf2edu", 
-                          "cm2edu", "f2g7b", "f2h7a", "m2c33", "f2l1", "cm2md_case_con", "cm2md_case_lib", "cf2marm", 
-                          "cf2cohm", "f2b1", "f2b1a", "f2b2", "f2b3")]
+```{r}
+
+wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_lib", "cf2age", "cm2fbir", "cf2edu", 
+                          "cm2edu", "f2h7a", "m2c33", "cm2md_case_lib", "cf2marm", 
+                          "cf2cohm", "f2b1", "f2b1a", "cf2povco")]
 wave_1_filtered <- data_wave_1[, c("idnum", "m1h3", "m1h3a", "f1h3", "f1h3a")]
 
-combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum")
+combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum") 
 
-#exclue -9 in cf2md_case_con
-combined_data <- combined_data %>%
-  filter(cf2md_case_con != -9 & cf2md_case_con != -3)
-head(combined_data)
-```
+combined_data_filtered <- combined_data %>%
+  filter(cf2md_case_lib >= 0, cf2age >= 0, cm2fbir >= 0)
+
+# encode new category for categorical variable:
+
+
+
+# exclude all negative values:
+combined_data_filtered <- combined_data %>%
+  filter_all(all_vars(. >= 0 ))
+
+
+
 ```{r}
-summary(combined_data)
+summary(combined_data_filtered)
+table(combined_data_filtered$cf2md_case_lib)
 ```
 
 
 ```{r}
 # check missing data
-sum(is.na(combined_data))
+colMeans(combined_data_filtered < 0)
 ```
 
 ```{r}
