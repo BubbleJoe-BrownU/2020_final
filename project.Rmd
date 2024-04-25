@@ -7,14 +7,15 @@ knitr::opts_chunk$set(echo = TRUE)
 library(haven)
 library(dplyr)
 library(ggplot2)
+library(car)
+library(olsrr)
 ```
 ```{r}
-data_wave_2 <- read_dta('/Users/a123/Desktop/FFdata/wave2/FF_wave2_2020v2.dta')
-data_wave_1 <- read_dta('/Users/a123/Desktop/FFdata/wave1/FF_wave1_2020v2.dta')
+data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
+data_wave_1 <- read_dta('dataset/FFdata/wave1/FF_wave1_2020v2.dta')
 ```
 
 ```{r}
-
 
 wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_lib", "cf2age", "cm2fbir", "cf2edu", 
                           "cm2edu", "f2h7a", "m2c33", "cm2md_case_lib", "cf2marm", 
@@ -23,70 +24,176 @@ wave_1_filtered <- data_wave_1[, c("idnum", "m1h3", "m1h3a", "f1h3", "f1h3a")]
 
 combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum") 
 
-# in cf2marm, cf2cohm 0 = no)
+# combine missing values in categorical columns into its own category
+cols_to_encode = c()
+combine_negatives <- function(x) {
+  ifelse(x < 0, -1, x)
+}
+combined_data <- combined_data %>%
+  mutate_at(c("cf2edu","cm2edu", "f2h7a", "m2c33", "cm2md_case_lib", "cf2marm", 
+                  "cf2cohm", "f2b1", "f2b1a","m1h3", "m1h3a", "f1h3","f1h3a"), ~ combine_negatives(.))
+
+# delete missing values for these three columns
 combined_data_filtered <- combined_data %>%
-  filter(cf2md_case_lib >= 0, cf2age >= 0, cm2fbir >= 0, cf2edu >= 0,
-         cm2edu >= 0, f2h7a >= 0, m2c33 >= 0, cm2md_case_lib >= 0, cf2marm >= 0,
-         cf2cohm >= 0, f2b1 >= 0, f2b1a >= 0, cf2povco >= 0,m1h3 >= 0,m1h3a >= 0,
-         f1h3 >= 0,f1h3a >= 0 )
-```
-
-
-
-
-```{r}
-summary(combined_data_filtered)
-table(combined_data_filtered$cf2md_case_lib)
-```
-
-```{r}
-#changing values for m2c33, changing from 201 to 1 (working), 202 to 2(unemployed), 203 to 3( in jail)
-combined_data_filtered <- combined_data_filtered %>%
+  filter(cf2md_case_lib >= 0, cf2age >= 0, cm2fbir >= 0) %>%
+  #change values for m2c33, changing from 201 to 1 (working), 202 to 2(unemployed), 203 to 3( in jail)
   mutate(m2c33 = case_when(
     m2c33 == 201 ~ 1,
     m2c33 == 202 ~ 2,
     m2c33 == 203 ~ 3,
     TRUE ~ m2c33
   ))
+
+# cf2edu >= 0,
+#          cm2edu >= 0, f2h7a >= 0, m2c33 >= 0, cm2md_case_lib >= 0, cf2marm >= 0,
+#          cf2cohm >= 0, f2b1 >= 0, f2b1a >= 0, cf2povco >= 0,m1h3 >= 0,m1h3a >= 0,
+#          f1h3 >= 0,f1h3a >= 0 )
+
+
+# drop index column
+combined_data_filtered <- combined_data_filtered[, !names(combined_data_filtered) == 'idnum']
+
+columns = data.frame(colnames(combined_data_filtered))
 ```
+
+
+```{r}
+# summary(combined_data_filtered)
+# table(combined_data_filtered$cf2md_case_lib)
+```
+
 
 ```{r}
 # check missing data
-colMeans(combined_data_filtered < 0)
+colMeans(combined_data_filtered < -1)
+```
+```{r}
+# check datatypes of columns:
+str(combined_data_filtered)
+```
+```{r}
+# change datatype of categorical columns to factor
+
+cat_cols = colnames(combined_data_filtered)
+cat_cols = cat_cols[! cat_cols %in% c('idnum','cf2md_case_lib','cf2age','cm2fbir','cf2povco')]
+
+for (col in cat_cols){
+  combined_data_filtered[[col]] <- factor(combined_data_filtered[[col]])
+}
+
 ```
 
+## EDA:
+
+### Target Variable:
 ```{r}
-# Father Depression Variable
-filtered_cf2md_case_con <- combined_data$cf2md_case_con
-depression_frequencies <- table(filtered_cf2md_case_con)
-barplot(depression_frequencies, main = "Histogram of Father's Depression", xlab = "Depression", ylab = "Frequency", names.arg = c(0, 1), ylim = c(0, max(depression_frequencies)))
+# Plot Father Depression Variable
+filtered_cf2md_case_lib <- combined_data_filtered$cf2md_case_lib
+depression_frequencies <- combined_data_filtered %>%
+  group_by(cf2md_case_lib) %>%
+  summarize(num_depressed = n())
+
+ggplot(depression_frequencies, aes(x = cf2md_case_lib, y = num_depressed)) +
+  geom_col() + 
+  labs(title = 'Distribution of father depression frequency',
+       x = 'Frequency',
+       y = 'Depression')
+# barplot(depression_frequencies, main = "Histogram of Father's Depression", xlab = "Depression", ylab = "Frequency", names.arg = c(0, 1), ylim = c(0, max(depression_frequencies)))
 ```
 
+### Explanatory Variables:
 ```{r}
-race_labels <- c("-9 Not in wave", "-3 Missing", "-2 Don't know", "-1 Refuse", "1 White", "2 Blck", "3 Asian", "4 AmInd", "5 Other") 
-combined_data$f1h3_factor <- factor(combined_data$f1h3, labels = race_labels)
+# Continuous variables EDA:
+cont_col = c("cf2age","cm2fbir","cf2povco")
 
-f2g5_factor_frequencies <- table(combined_data$f1h3_factor)
+hist(combined_data_filtered$cf2age, main = "Histogram of Father's Age", xlab = "Age", breaks = 30)
+hist(combined_data_filtered$cm2fbir, main = "Histogram of Mother's Age at Birth of First Child", xlab = "Age", breaks = 30)
+hist(combined_data_filtered$cf2povco, main = "Ratio of Household Income to Poverty Line", xlab = "Ratio", breaks = 30) # potentially has outliers
 
-par(mar = c(7, 4, 4, 2) + 0.1)
+for (col in cont_col){
+  p <- ggplot(combined_data_filtered, aes_string(x = "cf2md_case_lib", y = col, group = "cf2md_case_lib")) + 
+  geom_boxplot() + 
+    scale_x_discrete()
+  print(p)
+}
+  
+```
+### Multicolinearity Analysis:
+```{r}
+# simple linear model
+exclude_column <- c("f2b1","cf2md_case_lib") # remove because it is highly correlated with f2b1a
+columns_to_use <- setdiff(names(combined_data_filtered), exclude_column)
+formula <- as.formula(paste("cf2md_case_lib ~", paste(columns_to_use, collapse = " + ")))
 
-barplot(f2g5_factor_frequencies, main = "Bar Plot of Father's Race", 
-         ylab = "Frequency", 
-        las = 2, cex.names = 0.7)
-title(xlab = "Race Categories", line = 6)
-
-par(mar = c(5, 4, 4, 2) + 0.1)
+model0 <- glm(formula, family = 'binomial', data = combined_data_filtered)
+summary(model0)
 ```
 
+
 ```{r}
-valid_ages <- combined_data$cf2age[combined_data$cf2age > 0]
-hist(valid_ages, main = "Histogram of Father's Age", xlab = "Age", breaks = 30)
+# Question: how do we calculate correlation between categorical features?
+
+
+# VIF:
+
+# calculate VIF:
+# non of the normalized VIF are above 5 so we are good :)
+vif(model0)
+
+```
+### Outlier Analysis:
+There are quite a lot of outliers
+```{r}
+ols_plot_cooksd_bar(model0)
+```
+
+### Check normality:
+does not follow normal distribution at all T.T
+```{r}
+# plot qqplot:
+res <- residuals(model0)
+res_df = data.frame(res)
+
+res_qq_plot <- ggplot(res_df, aes(sample = res)) +
+   geom_qq() +
+     geom_qq_line() +
+        labs(x = "quantile",
+               y = "residual")
+
+res_qq_plot
+```
+```{r}
+plot(model0, which = 1, main = "Residuals vs Fitted")
+```
+
+
+## OLD EDA CODE:
+
+```{r}
+race_levels <- c(-1,1,2,3,4,5)
+race_labels <- c("-1 Missing", "1 White", "2 Blck", "3 Asian", "4 AmInd", "5 Other") 
+combined_data_filtered$f1h3_factor <- factor(combined_data_filtered$f1h3, levels = race_levels, labels = race_labels)
+
+f2g5_factor_frequencies <- table(combined_data_filtered$f1h3_factor)
+barplot(f2g5_factor_frequencies)
+
+
+# #par(mar = c(7, 4, 4, 2) + 0.1)
+# 
+# barplot(f2g5_factor_frequencies, main = "Bar Plot of Father's Race", 
+#          ylab = "Frequency", 
+#         las = 2, cex.names = 0.7)
+# title(xlab = "Race Categories", line = 6)
+# 
+# #par(mar = c(5, 4, 4, 2) + 0.1)
 ```
 
 ```{r}
 cleaned_data <- combined_data 
 education_levels <- c(-3, 1, 2, 3, 4)
 education_labels <- c("-3 Missing", "1 less HS", "2 HS or equiv", "3 Some coll, tech", "4 coll or grad")
+
+combined_data_filtered$cf2edu <- factor(combined_data_filtered$cf2edu)
 
 cleaned_data$cf2edu <- factor(cleaned_data$cf2edu, levels = education_levels, labels = education_labels)
 
