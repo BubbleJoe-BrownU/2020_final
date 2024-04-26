@@ -96,8 +96,9 @@ depression_frequencies <- combined_data_filtered %>%
 ggplot(depression_frequencies, aes(x = cf2md_case_lib, y = num_depressed)) +
   geom_col() + 
   labs(title = 'Distribution of father depression frequency',
-       x = 'Frequency',
-       y = 'Depression')
+       x = 'Depression',
+       y = 'Frequency') +
+  theme(plot.title = element_text(hjust = 0.5))
 # barplot(depression_frequencies, main = "Histogram of Father's Depression", xlab = "Depression", ylab = "Frequency", names.arg = c(0, 1), ylim = c(0, max(depression_frequencies)))
 ```
 
@@ -110,10 +111,22 @@ hist(combined_data_filtered$cf2age, main = "Histogram of Father's Age", xlab = "
 hist(combined_data_filtered$cm2fbir, main = "Histogram of Mother's Age at Birth of First Child", xlab = "Age", breaks = 30)
 hist(combined_data_filtered$cf2povco, main = "Ratio of Household Income to Poverty Line", xlab = "Ratio", breaks = 30) # potentially has outliers
 
-for (col in cont_col){
-  p <- ggplot(combined_data_filtered, aes_string(x = "cf2md_case_lib", y = col, group = "cf2md_case_lib")) + 
-  geom_boxplot() + 
-    scale_x_discrete()
+titles <- c(cf2age = "Boxplot of Father's Age and Father's Depression", 
+            cm2fbir = "Boxplot of Mother’s Age at Birth of First Child and Father's Depression", 
+            cf2povco = "Boxplot of Ratio of Household Income to Poverty Line")
+
+y_labels <- c(cf2age = "Father's Age", 
+              cm2fbir = "Mother's Age at First Birth", 
+              cf2povco = "Income to Poverty Ratio")
+
+for (col in cont_col) {
+  title <- titles[col]
+  y_label <- y_labels[col]
+  p <- ggplot(combined_data_filtered, aes(x = cf2md_case_lib, y = !!sym(col))) + 
+    geom_boxplot() +
+    scale_x_discrete(labels = c("0" = "No Depression", "1" = "Has Depression")) +
+    labs(title = title, y = y_label, x = "Depression of Father") +
+    theme(plot.title = element_text(hjust = 0.5))  # Center title and angle x-axis text
   print(p)
 }
   
