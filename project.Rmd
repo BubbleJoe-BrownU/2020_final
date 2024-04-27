@@ -11,6 +11,7 @@ library(car)
 library(olsrr)
 ```
 ```{r}
+rm(list = ls())
 data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
 data_wave_1 <- read_dta('dataset/FFdata/wave1/FF_wave1_2020v2.dta')
 ```
@@ -80,7 +81,9 @@ cat_cols = cat_cols[! cat_cols %in% c('idnum','cf2md_case_lib','cf2age','cm2fbir
 for (col in cat_cols){
   combined_data_filtered[[col]] <- factor(combined_data_filtered[[col]])
 }
-
+table(combined_data_filtered$cf2md_case_lib)
+combined_data_filtered$cf2md_case_lib <- factor(combined_data_filtered$cf2md_case_lib, levels = c(0, 1))
+#table(combined_data_filtered$cf2md_case_lib)
 ```
 
 ## EDA:
