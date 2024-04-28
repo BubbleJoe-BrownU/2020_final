@@ -9,7 +9,12 @@ library(dplyr)
 library(ggplot2)
 library(car)
 library(olsrr)
+library(pROC)
+library(caret)
+library(glmnet)
+library(ROSE)
 ```
+
 ```{r}
 rm(list = ls())
 data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
@@ -167,19 +172,111 @@ ols_plot_cooksd_bar(model0)
 does not follow normal distribution at all T.T
 ```{r}
 # plot qqplot:
-res <- residuals(model0)
-res_df = data.frame(res)
+# res <- residuals(model0)
+# res_df = data.frame(res)
 
-res_qq_plot <- ggplot(res_df, aes(sample = res)) +
-   geom_qq() +
-     geom_qq_line() +
-        labs(x = "quantile",
-               y = "residual")
-
-res_qq_plot
+# res_qq_plot <- ggplot(res_df, aes(sample = res)) +
+#    geom_qq() +
+#      geom_qq_line() +
+#         labs(x = "quantile",
+#                y = "residual")
+# 
+# res_qq_plot
 ```
+### Deviance Residuals plot:
 ```{r}
-plot(model0, which = 1, main = "Residuals vs Fitted")
+plot(residuals(model0, type = "deviance"), main="Deviance Residuals",
+     xlab="Case Number", ylab="Deviance Residuals", pch=20, col="blue")
+abline(h = 0, col = "red")
+```
+
+```{r}
+# plot(model0, which = 1, main = "Residuals vs Fitted")
+```
+
+### Area Under the ROC Curve (AUC) and Confusion Matrix
+```{r}
+predictions <- predict(model0, type = "response")
+
+# Calculate the AUC
+roc_curve <- roc(response = combined_data_filtered$cf2md_case_lib, predictor = predictions)
+auc_value <- auc(roc_curve)
+print(auc_value)
+
+# Create confusion matrix
+predicted_class <- ifelse(predictions > 0.5, 1, 0)
+conf_matrix <- confusionMatrix(as.factor(predicted_class), as.factor(combined_data_filtered$cf2md_case_lib))
+conf_matrix
+
+f1_score <- conf_matrix$byClass['F1']
+print(paste("F1 Score:", f1_score))
+```
+
+### Penalized Logistic Regression: LASSO
+```{r}
+set.seed(2020)
+# Applying SMOTE to balance the dataset
+data_balanced <- ovun.sample(cf2md_case_lib ~ ., data = combined_data_filtered, method = "over", N = 4000)$data
+x <- as.matrix(data_balanced[, columns_to_use])
+y <- data_balanced$cf2md_case_lib
+
+cv_lasso <- cv.glmnet(x, y, family="binomial", alpha=1)
+plot(cv_lasso)
+plot(cv_lasso$glmnet.fit, xvar = "lambda", label = TRUE)
+
+#choose best lambda and refit the model
+best_lambda <- cv_lasso$lambda.min
+lasso_model <- glmnet(x, y, family="binomial", alpha=1, lambda=best_lambda)
+
+# Extracting non-zero coefficients
+lasso_coef <- coef(lasso_model, s = best_lambda)
+print(lasso_coef)
+
+predicted_probabilities <- predict(lasso_model, newx = x, s = best_lambda, type = "response")
+
+# Convert probabilities to binary class predictions based on a threshold of 0.5
+predicted_classes <- ifelse(predicted_probabilities > 0.5, 1, 0)
+
+# Create confusion matrix
+conf_matrix <- confusionMatrix(as.factor(predicted_classes), as.factor(y), positive = "1")
+print(conf_matrix)
+
+roc_result <- roc(y, predicted_probabilities)
+auc_value <- auc(roc_result)
+print(paste("Area Under the ROC Curve (AUC):", auc_value))
+
+f1_score <- conf_matrix$byClass['F1']
+print(paste("F1 Score:", f1_score))
+
+```
+### Bootstrapping the Lasso model to check stability of coefficients
+
+```{r}
+# Set the number of bootstrap replications
+n_bootstraps <- 1000
+coefs <- matrix(NA, ncol = length(coefficients(lasso_model)[-1]), nrow = n_bootstraps)  # prepare matrix to store coefficients
+
+set.seed(2020)  # For reproducibility
+
+for (i in 1:n_bootstraps) {
+  # Sample with replacement from the original data
+  boot_indices <- sample(1:nrow(x), replace = TRUE)
+  x_boot <- x[boot_indices, ]
+  y_boot <- y[boot_indices]
+  
+  # Fit Lasso model on the bootstrap sample
+  lasso_boot <- glmnet(x_boot, y_boot, family = "binomial", alpha = 1, lambda = best_lambda)
+  
+  # Store the coefficients; adjust the indexing if necessary depending on whether intercept is included
+  coefs[i, ] <- as.matrix(coef(lasso_boot, s = best_lambda)[-1])
+}
+
+# Calculate the mean, standard deviation and zero-count for each coefficient
+coef_stats <- apply(coefs, 2, function(x) c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE), zero_count = sum(x == 0, na.rm = TRUE)))
+coef_stats <- t(coef_stats)  # transpose for better readability
+
+# Display the results
+print(coef_stats)
 ```
 
 
