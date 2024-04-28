@@ -7,66 +7,306 @@ knitr::opts_chunk$set(echo = TRUE)
 library(haven)
 library(dplyr)
 library(ggplot2)
+library(car)
+library(olsrr)
+library(pROC)
+library(caret)
+library(glmnet)
+library(ROSE)
 ```
 
 ```{r}
+rm(list = ls())
 data_wave_2 <- read_dta('dataset/FFdata/wave2/FF_wave2_2020v2.dta')
 data_wave_1 <- read_dta('dataset/FFdata/wave1/FF_wave1_2020v2.dta')
+```
 
-wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_con", "cf2age", "cm2fbir", "cf2edu", 
-                          "cm2edu", "f2g7b", "f2h7a", "m2c33", "f2l1", "cm2md_case_con", "cm2md_case_lib", "cf2marm", 
-                          "cf2cohm", "f2b1", "f2b1a", "f2b2", "f2b3")]
+```{r}
+
+wave_2_filtered <- data_wave_2[, c("idnum", "cf2md_case_lib", "cf2age", "cm2fbir", "cf2edu", 
+                          "cm2edu", "f2h7a", "m2c33", "cm2md_case_lib", "cf2marm", 
+                          "cf2cohm", "f2b1", "f2b1a", "cf2povco")]
 wave_1_filtered <- data_wave_1[, c("idnum", "m1h3", "m1h3a", "f1h3", "f1h3a")]
 
-combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum")
+combined_data <- left_join(wave_2_filtered, wave_1_filtered, by = "idnum") 
 
-#exclue -9 in cf2md_case_con
+# combine missing values in categorical columns into its own category
+cols_to_encode = c()
+combine_negatives <- function(x) {
+  ifelse(x < 0, -1, x)
+}
 combined_data <- combined_data %>%
-  filter(cf2md_case_con != -9 & cf2md_case_con != -3)
-head(combined_data)
+  mutate_at(c("cf2edu","cm2edu", "f2h7a", "m2c33", "cm2md_case_lib", "cf2marm", 
+                  "cf2cohm", "f2b1", "f2b1a","m1h3", "m1h3a", "f1h3","f1h3a"), ~ combine_negatives(.))
+
+# delete missing values for these three columns
+combined_data_filtered <- combined_data %>%
+  filter(cf2md_case_lib >= 0, cf2age >= 0, cm2fbir >= 0) %>%
+  #change values for m2c33, changing from 201 to 1 (working), 202 to 2(unemployed), 203 to 3( in jail)
+  mutate(m2c33 = case_when(
+    m2c33 == 201 ~ 1,
+    m2c33 == 202 ~ 2,
+    m2c33 == 203 ~ 3,
+    TRUE ~ m2c33
+  ))
+
+# cf2edu >= 0,
+#          cm2edu >= 0, f2h7a >= 0, m2c33 >= 0, cm2md_case_lib >= 0, cf2marm >= 0,
+#          cf2cohm >= 0, f2b1 >= 0, f2b1a >= 0, cf2povco >= 0,m1h3 >= 0,m1h3a >= 0,
+#          f1h3 >= 0,f1h3a >= 0 )
+
+
+# drop index column
+combined_data_filtered <- combined_data_filtered[, !names(combined_data_filtered) == 'idnum']
+
+columns = data.frame(colnames(combined_data_filtered))
 ```
+
+
 ```{r}
-summary(combined_data)
+# summary(combined_data_filtered)
+# table(combined_data_filtered$cf2md_case_lib)
 ```
 
 
 ```{r}
 # check missing data
-sum(is.na(combined_data))
+colMeans(combined_data_filtered < -1)
+```
+```{r}
+# check datatypes of columns:
+str(combined_data_filtered)
+```
+```{r}
+# change datatype of categorical columns to factor
+
+cat_cols = colnames(combined_data_filtered)
+cat_cols = cat_cols[! cat_cols %in% c('idnum','cf2md_case_lib','cf2age','cm2fbir','cf2povco')]
+
+for (col in cat_cols){
+  combined_data_filtered[[col]] <- factor(combined_data_filtered[[col]])
+}
+table(combined_data_filtered$cf2md_case_lib)
+combined_data_filtered$cf2md_case_lib <- factor(combined_data_filtered$cf2md_case_lib, levels = c(0, 1))
+#table(combined_data_filtered$cf2md_case_lib)
+```
+
+## EDA:
+
+### Target Variable:
+```{r}
+# Plot Father Depression Variable
+filtered_cf2md_case_lib <- combined_data_filtered$cf2md_case_lib
+depression_frequencies <- combined_data_filtered %>%
+  group_by(cf2md_case_lib) %>%
+  summarize(num_depressed = n())
+
+ggplot(depression_frequencies, aes(x = cf2md_case_lib, y = num_depressed)) +
+  geom_col() + 
+  labs(title = 'Distribution of father depression frequency',
+       x = 'Depression',
+       y = 'Frequency') +
+  theme(plot.title = element_text(hjust = 0.5))
+# barplot(depression_frequencies, main = "Histogram of Father's Depression", xlab = "Depression", ylab = "Frequency", names.arg = c(0, 1), ylim = c(0, max(depression_frequencies)))
+```
+
+### Explanatory Variables:
+```{r}
+# Continuous variables EDA:
+cont_col = c("cf2age","cm2fbir","cf2povco")
+
+hist(combined_data_filtered$cf2age, main = "Histogram of Father's Age", xlab = "Age", breaks = 30)
+hist(combined_data_filtered$cm2fbir, main = "Histogram of Mother's Age at Birth of First Child", xlab = "Age", breaks = 30)
+hist(combined_data_filtered$cf2povco, main = "Ratio of Household Income to Poverty Line", xlab = "Ratio", breaks = 30) # potentially has outliers
+
+titles <- c(cf2age = "Boxplot of Father's Age and Father's Depression", 
+            cm2fbir = "Boxplot of Mother’s Age at Birth of First Child and Father's Depression", 
+            cf2povco = "Boxplot of Ratio of Household Income to Poverty Line")
+
+y_labels <- c(cf2age = "Father's Age", 
+              cm2fbir = "Mother's Age at First Birth", 
+              cf2povco = "Income to Poverty Ratio")
+
+for (col in cont_col) {
+  title <- titles[col]
+  y_label <- y_labels[col]
+  p <- ggplot(combined_data_filtered, aes(x = cf2md_case_lib, y = !!sym(col))) + 
+    geom_boxplot() +
+    scale_x_discrete(labels = c("0" = "No Depression", "1" = "Has Depression")) +
+    labs(title = title, y = y_label, x = "Depression of Father") +
+    theme(plot.title = element_text(hjust = 0.5))  # Center title and angle x-axis text
+  print(p)
+}
+  
+```
+### Multicolinearity Analysis:
+```{r}
+# simple linear model
+exclude_column <- c("f2b1","cf2md_case_lib") # remove because it is highly correlated with f2b1a
+columns_to_use <- setdiff(names(combined_data_filtered), exclude_column)
+formula <- as.formula(paste("cf2md_case_lib ~", paste(columns_to_use, collapse = " + ")))
+
+model0 <- glm(formula, family = 'binomial', data = combined_data_filtered)
+summary(model0)
+```
+
+
+```{r}
+# Question: how do we calculate correlation between categorical features?
+
+
+# VIF:
+
+# calculate VIF:
+# non of the normalized VIF are above 5 so we are good :)
+vif(model0)
+
+```
+### Outlier Analysis:
+There are quite a lot of outliers
+```{r}
+ols_plot_cooksd_bar(model0)
+```
+
+### Check normality:
+does not follow normal distribution at all T.T
+```{r}
+# plot qqplot:
+# res <- residuals(model0)
+# res_df = data.frame(res)
+
+# res_qq_plot <- ggplot(res_df, aes(sample = res)) +
+#    geom_qq() +
+#      geom_qq_line() +
+#         labs(x = "quantile",
+#                y = "residual")
+# 
+# res_qq_plot
+```
+### Deviance Residuals plot:
+```{r}
+plot(residuals(model0, type = "deviance"), main="Deviance Residuals",
+     xlab="Case Number", ylab="Deviance Residuals", pch=20, col="blue")
+abline(h = 0, col = "red")
 ```
 
 ```{r}
-# Father Depression Variable
-filtered_cf2md_case_con <- combined_data$cf2md_case_con
-depression_frequencies <- table(filtered_cf2md_case_con)
-barplot(depression_frequencies, main = "Histogram of Father's Depression", xlab = "Depression", ylab = "Frequency", names.arg = c(0, 1), ylim = c(0, max(depression_frequencies)))
+# plot(model0, which = 1, main = "Residuals vs Fitted")
 ```
 
+### Area Under the ROC Curve (AUC) and Confusion Matrix
 ```{r}
-race_labels <- c("-9 Not in wave", "-3 Missing", "-2 Don't know", "-1 Refuse", "1 White", "2 Blck", "3 Asian", "4 AmInd", "5 Other") 
-combined_data$f1h3_factor <- factor(combined_data$f1h3, labels = race_labels)
+predictions <- predict(model0, type = "response")
 
-f2g5_factor_frequencies <- table(combined_data$f1h3_factor)
+# Calculate the AUC
+roc_curve <- roc(response = combined_data_filtered$cf2md_case_lib, predictor = predictions)
+auc_value <- auc(roc_curve)
+print(auc_value)
 
-par(mar = c(7, 4, 4, 2) + 0.1)
+# Create confusion matrix
+predicted_class <- ifelse(predictions > 0.5, 1, 0)
+conf_matrix <- confusionMatrix(as.factor(predicted_class), as.factor(combined_data_filtered$cf2md_case_lib))
+conf_matrix
 
-barplot(f2g5_factor_frequencies, main = "Bar Plot of Father's Race", 
-         ylab = "Frequency", 
-        las = 2, cex.names = 0.7)
-title(xlab = "Race Categories", line = 6)
-
-par(mar = c(5, 4, 4, 2) + 0.1)
+f1_score <- conf_matrix$byClass['F1']
+print(paste("F1 Score:", f1_score))
 ```
 
+### Penalized Logistic Regression: LASSO
 ```{r}
-valid_ages <- combined_data$cf2age[combined_data$cf2age > 0]
-hist(valid_ages, main = "Histogram of Father's Age", xlab = "Age", breaks = 30)
+set.seed(2020)
+# Applying SMOTE to balance the dataset
+data_balanced <- ovun.sample(cf2md_case_lib ~ ., data = combined_data_filtered, method = "over", N = 4000)$data
+x <- as.matrix(data_balanced[, columns_to_use])
+y <- data_balanced$cf2md_case_lib
+
+cv_lasso <- cv.glmnet(x, y, family="binomial", alpha=1)
+plot(cv_lasso)
+plot(cv_lasso$glmnet.fit, xvar = "lambda", label = TRUE)
+
+#choose best lambda and refit the model
+best_lambda <- cv_lasso$lambda.min
+lasso_model <- glmnet(x, y, family="binomial", alpha=1, lambda=best_lambda)
+
+# Extracting non-zero coefficients
+lasso_coef <- coef(lasso_model, s = best_lambda)
+print(lasso_coef)
+
+predicted_probabilities <- predict(lasso_model, newx = x, s = best_lambda, type = "response")
+
+# Convert probabilities to binary class predictions based on a threshold of 0.5
+predicted_classes <- ifelse(predicted_probabilities > 0.5, 1, 0)
+
+# Create confusion matrix
+conf_matrix <- confusionMatrix(as.factor(predicted_classes), as.factor(y), positive = "1")
+print(conf_matrix)
+
+roc_result <- roc(y, predicted_probabilities)
+auc_value <- auc(roc_result)
+print(paste("Area Under the ROC Curve (AUC):", auc_value))
+
+f1_score <- conf_matrix$byClass['F1']
+print(paste("F1 Score:", f1_score))
+
+```
+### Bootstrapping the Lasso model to check stability of coefficients
+
+```{r}
+# Set the number of bootstrap replications
+n_bootstraps <- 1000
+coefs <- matrix(NA, ncol = length(coefficients(lasso_model)[-1]), nrow = n_bootstraps)  # prepare matrix to store coefficients
+
+set.seed(2020)  # For reproducibility
+
+for (i in 1:n_bootstraps) {
+  # Sample with replacement from the original data
+  boot_indices <- sample(1:nrow(x), replace = TRUE)
+  x_boot <- x[boot_indices, ]
+  y_boot <- y[boot_indices]
+  
+  # Fit Lasso model on the bootstrap sample
+  lasso_boot <- glmnet(x_boot, y_boot, family = "binomial", alpha = 1, lambda = best_lambda)
+  
+  # Store the coefficients; adjust the indexing if necessary depending on whether intercept is included
+  coefs[i, ] <- as.matrix(coef(lasso_boot, s = best_lambda)[-1])
+}
+
+# Calculate the mean, standard deviation and zero-count for each coefficient
+coef_stats <- apply(coefs, 2, function(x) c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE), zero_count = sum(x == 0, na.rm = TRUE)))
+coef_stats <- t(coef_stats)  # transpose for better readability
+
+# Display the results
+print(coef_stats)
+```
+
+
+## OLD EDA CODE:
+
+```{r}
+race_levels <- c(-1,1,2,3,4,5)
+race_labels <- c("-1 Missing", "1 White", "2 Blck", "3 Asian", "4 AmInd", "5 Other") 
+combined_data_filtered$f1h3_factor <- factor(combined_data_filtered$f1h3, levels = race_levels, labels = race_labels)
+
+f2g5_factor_frequencies <- table(combined_data_filtered$f1h3_factor)
+barplot(f2g5_factor_frequencies)
+
+
+# #par(mar = c(7, 4, 4, 2) + 0.1)
+# 
+# barplot(f2g5_factor_frequencies, main = "Bar Plot of Father's Race", 
+#          ylab = "Frequency", 
+#         las = 2, cex.names = 0.7)
+# title(xlab = "Race Categories", line = 6)
+# 
+# #par(mar = c(5, 4, 4, 2) + 0.1)
 ```
 
 ```{r}
 cleaned_data <- combined_data 
 education_levels <- c(-3, 1, 2, 3, 4)
 education_labels <- c("-3 Missing", "1 less HS", "2 HS or equiv", "3 Some coll, tech", "4 coll or grad")
+
+combined_data_filtered$cf2edu <- factor(combined_data_filtered$cf2edu)
 
 cleaned_data$cf2edu <- factor(cleaned_data$cf2edu, levels = education_levels, labels = education_labels)
 
