@@ -1,5 +1,6 @@
 ---
 title: "project2020"
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -13,6 +14,11 @@ library(pROC)
 library(caret)
 library(glmnet)
 library(ROSE)
+# for tree-based methods
+library(rpart)
+library(rpart.plot)
+# for random forest models
+library(randomForest)
 ```
 
 ```{r}
@@ -139,6 +145,16 @@ for (col in cont_col) {
 }
   
 ```
+### Correlation Check
+```{r}
+# TODO: Calculate the correlation between variables
+#numeric_columns <- sapply(combined_data_filtered, is.numeric)
+#combined_data_numeric <- combined_data_filtered[, numeric_columns]
+
+#correlation_matrix <- cor(combined_data_numeric, use = "pairwise.complete.obs")
+# print(correlation_matrix)
+```
+
 ### Multicolinearity Analysis:
 ```{r}
 # simple linear model
@@ -279,6 +295,91 @@ coef_stats <- t(coef_stats)  # transpose for better readability
 print(coef_stats)
 ```
 
+## Advanced Model (Tree-based)
+In this part, we first trained a simple decision tree model on the train split of the imbalanced dataset. We found the prediction of this model is highly biased towards the majority labels (all 0s). Based on this observation, we resampled the imbalanced dataset to create a new dataset with balanced class distribution, in order to cope with the previous class imbalance problem. Then we trained a simple decision tree model on the train split of the balanced dataset, and tested it on the test split. The model has an accuracy of 64%
+
+### Part 1: Decision Tree Model on Imbalanced Dataset
+The subset of the dataset we are using contains 2910 data points with label 0 and 336 data points with label 1, which suffers from the imbalanced class problem to some degree. If we train a vanilla tree-based model, the result model is prone to predict the majority class (in this case, all 0s).
+```{r}
+# split the data, train the model on the training split, and evaluate the model on the test split
+training_indices <- createDataPartition(combined_data_filtered$cf2md_case_lib, p = 0.8, list = FALSE)
+train_data <- combined_data_filtered[training_indices, ]
+test_data <- combined_data_filtered[-training_indices, ]
+
+tree_model0 <- rpart(formula, data = train_data, method = "class", control = rpart.control(minsplit = 10, cp = 0.1))
+print(tree_model0)
+```
+
+```{r}
+rpart.plot(tree_model0)
+```
+```{r}
+# Predict and evaluate
+predictions <- predict(tree_model0, test_data, type = "class")
+confusionMatrix(predictions, test_data$cf2md_case_lib)
+```
+
+### Part 1: Decision Tree Model on Balanced (Resampled) Dataset
+To deal with the class imbalance problem, we first perform resampling on the original data, then used the balanced, resampled data to train a decision tree model. We can see that even trained on the resampled data, the decision tree model still performs poorly, with both training and test accuracy around 64%, indicating the underfitting of simple decision tree. Hence the need for a more complex model like random forest (bagged decision trees).
+```{r}
+# resample the data s.t. the number of different classes equal to one another
+balanced_data <- ovun.sample(cf2md_case_lib ~ ., data = combined_data_filtered, method = "over", N = 2910*2)$data
+table(balanced_data$cf2md_case_lib)
+```
+
+```{r}
+# perform train test split
+training_indices <- createDataPartition(balanced_data$cf2md_case_lib, p = 0.8, list = FALSE)
+training_indices <- training_indices[, 1]
+train_data <- balanced_data[training_indices, ]
+test_data <- balanced_data[-training_indices, ]
+# train a decision tree model on the balanced dataset
+tree_model1 <- rpart(formula, data = train_data, method = "class", control = rpart.control(minsplit = 10, cp = 0.1))
+print(tree_model1)
+```
+```{r}
+rpart.plot(tree_model1)
+```
+```{r}
+# Predict on train data
+predictions <- predict(tree_model1, train_data, type = "class")
+# Evaluate model performance on the training set
+confusionMatrix(predictions, train_data$cf2md_case_lib)
+```
+
+```{r}
+# Predict on test data
+predictions <- predict(tree_model1, test_data, type = "class")
+# Evaluate model performance on the test split
+confusionMatrix(predictions, test_data$cf2md_case_lib)
+```
+
+### Part 3: Random Forest Model on Balanced (Resampled) Data
+```{r}
+set.seed(123)  # for reproducibility
+training_indices <- createDataPartition(balanced_data$cf2md_case_lib, p = 0.8, list = FALSE)
+training_indices <- training_indices[, 1]
+train_data <- balanced_data[training_indices, ]
+test_data <- balanced_data[-training_indices, ]
+# Train the model
+rf_model <- randomForest(formula, data = train_data, ntree = 500, mtry = sqrt(ncol(train_data) - 1), importance = TRUE)
+
+# Print the model summary
+print(rf_model)
+```
+```{r}
+# Predict on the test data
+predictions <- predict(rf_model, test_data)
+# Evaluate the predictions on the test dataset
+confusionMatrix(predictions, test_data$cf2md_case_lib)
+```
+```{r}
+# Check variable importance
+importance(rf_model)
+varImpPlot(rf_model)
+```
+#### Interpretation of the Random Forest Model
+From the variance importance plot of the random forest model, we can see that the top 5 most important covariate are, in descending order, `cf2povco`, `cf2age`, `cm2fbir`, `m2c33`, and `cm2edu`, according to the mean decrease accuracy and the mean decreased gini.
 
 ## OLD EDA CODE:
 
