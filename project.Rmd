@@ -399,3 +399,95 @@ varImpPlot(rf_model)
 ```
 #### Interpretation of the Random Forest Model
 From the variance importance plot of the random forest model, we can see that the top 5 most important covariate are, in descending order, `cf2povco`, `cf2age`, `cm2fbir`, `m2c33`, and `cm2edu`, according to the mean decrease accuracy and the mean decreased gini.
+
+
+#### Poster Plots:
+
+Target Variable:
+```{r}
+# Plot Father Depression Variable
+filtered_cf2md_case_lib <- combined_data_filtered$cf2md_case_lib
+depression_frequencies <- combined_data_filtered %>%
+  group_by(cf2md_case_lib) %>%
+  summarize(num_depressed = n())
+
+colors = c('#6baed6','#08519c')
+
+ggplot(depression_frequencies, 
+       aes(x = cf2md_case_lib, y = num_depressed, fill = cf2md_case_lib)) +
+  geom_col() + 
+  labs(title = "Distribution of Father's Depression",
+       x = 'Depression',
+       y = 'Frequency') +
+  scale_x_discrete(labels = c("0" = "No Depression", "1" = "Has Depression")) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(), 
+    panel.grid.major.x = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none")
+```
+
+```{r}
+# plot box plot of age vs depression
+ggplot(combined_data_filtered, aes(x = cf2md_case_lib, 
+                                          y = cf2age, 
+                                          fill = cf2md_case_lib)) + 
+    geom_boxplot() +
+    scale_x_discrete(labels = c("0" = "No Depression", "1" = "Has Depression")) +
+    scale_fill_manual(values = colors) +
+    #scale_color_manual(values = c("#bdbdbd","#969696")) + 
+    theme_minimal() +
+    theme(
+      panel.grid.minor = element_blank(), 
+      panel.grid.major.x = element_blank(),
+      plot.title = element_text(hjust = 0.5),
+      legend.position = "none") + 
+  labs(title = "Boxplot of Father's Age vs. Depression",
+        x = "Depression",
+       y = "Father's Age")
+```
+
+```{r}
+# plot histogram of log of income to poverty threshold ratio
+combined_data_filtered <- mutate(combined_data_filtered, log_cf2povco = log(cf2povco))
+
+ggplot(combined_data_filtered, aes(x = log_cf2povco)) + 
+    geom_histogram(bins = 20,  fill = "#08519c") +
+    labs(title = "Distribution of Househole Income to Poverty Threshold Ratio", 
+         y = "Frequency",
+         x = "log(Househole Income to Poverty Threshold Ratio)") +
+   theme_minimal() +
+    theme(
+      panel.grid.minor = element_blank(), 
+      panel.grid.major.x = element_blank(),
+      plot.title = element_text(hjust = 0.5)) # Center title and angle x-axis text
+```
+
+```{r}
+# plot distribution of race:
+
+race_levels <- c(-1,1,2,3,4,5)
+race_labels <- c("Missing", "White", "Blck", "Asian", "AmInd", "Other") 
+combined_data_filtered$f1h3_factor <- factor(combined_data_filtered$f1h3, levels = race_levels, labels = race_labels)
+
+combined_face_count <- combined_data_filtered %>%
+  group_by(f1h3_factor) %>%
+  summarize(race_count = n())
+
+ggplot(combined_face_count, aes(x = reorder(f1h3_factor, race_count), y = race_count, fill = reorder(f1h3_factor, race_count))) +
+  geom_col() + 
+  labs(title = "Distribution of Father's Race", 
+         x = "Race",
+         y = "Frequency") +
+  scale_fill_manual(values = c('#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b')) +
+   theme_minimal() +
+    theme(
+      panel.grid.minor = element_blank(), 
+      panel.grid.major.x = element_blank(),
+      plot.title = element_text(hjust = 0.5),
+      legend.position = "none"
+      ) # Center title and angle x-axis text
+```
+
