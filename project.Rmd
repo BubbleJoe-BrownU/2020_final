@@ -181,33 +181,52 @@ vif(model0)
 ### Outlier Analysis:
 There are quite a lot of outliers
 ```{r}
-ols_plot_cooksd_bar(model0)
+plot <- ols_plot_cooksd_bar(model0)
+
+# Add a title and center it, and make title, x-label, y-label larger
+plot <- plot +
+  ggtitle("Cook's Distance Bar Plot") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 17),  # Increase title size
+        axis.title.x = element_text(size = 13),  # Increase x-axis label size
+        axis.title.y = element_text(size = 13))  # Increase y-axis label size
+
+plot
 ```
 
 ### Check normality:
 does not follow normal distribution at all T.T
 ```{r}
 # plot qqplot:
-# res <- residuals(model0)
-# res_df = data.frame(res)
+res <- residuals(model0)
+res_df = data.frame(res)
 
-# res_qq_plot <- ggplot(res_df, aes(sample = res)) +
-#    geom_qq() +
-#      geom_qq_line() +
-#         labs(x = "quantile",
-#                y = "residual")
-# 
-# res_qq_plot
+res_qq_plot <- ggplot(res_df, aes(sample = res)) +
+   geom_qq() +
+     geom_qq_line() +
+        labs(x = "quantile",
+               y = "residual")+
+   ggtitle("QQ Plot of Residuals")+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+res_qq_plot
 ```
 ### Deviance Residuals plot:
 ```{r}
 plot(residuals(model0, type = "deviance"), main="Deviance Residuals",
-     xlab="Case Number", ylab="Deviance Residuals", pch=20, col="blue")
+     xlab="Case Number", ylab="Deviance Residuals", pch=20, col="blue",
+     cex.main=1.5,    # Increases the main title size
+     cex.lab=1.2,     # Increases the x and y labels size
+     cex.axis=1.1)    # Optionally, increases the axis text size
 abline(h = 0, col = "red")
 ```
 
 ```{r}
-# plot(model0, which = 1, main = "Residuals vs Fitted")
+plot(model0, which = 1,
+     cex.main=1.5,  # Increases the main title size
+     cex.lab=1.2,   # Increases the x and y labels size
+     cex.axis=1.1)  # Optionally, increases the axis text size
 ```
 
 ### Area Under the ROC Curve (AUC) and Confusion Matrix
@@ -232,7 +251,7 @@ print(paste("F1 Score:", f1_score))
 ```{r}
 set.seed(2020)
 # Applying SMOTE to balance the dataset
-data_balanced <- ovun.sample(cf2md_case_lib ~ ., data = combined_data_filtered, method = "over", N = 4000)$data
+data_balanced <- ovun.sample(cf2md_case_lib ~ ., data = combined_data_filtered, method = "over", N = 2910*2)$data
 x <- as.matrix(data_balanced[, columns_to_use])
 y <- data_balanced$cf2md_case_lib
 
