@@ -487,19 +487,50 @@ combined_race_count <- combined_data_filtered %>%
   summarize(race_count = n())
 
 ggplot(combined_race_count, aes(x = reorder(f1h3_factor, race_count), y = race_count, fill = cf2md_case_lib)) +
-  geom_col() + 
+  geom_col(width = 0.7) +  # Adjust width here for spacing between bars
   labs(title = "Distribution of Father's Race", 
-         x = "Race",
-         y = "Frequency") +
-  scale_fill_manual(values = colors,
-                    name = 'Depression') + #,'#4292c6','#2171b5','#08519c','#08306b')) +
+       x = "Race",
+       y = "Frequency") +
+  scale_fill_manual(values = colors, name = "Depression") +
   scale_x_discrete(labels = c('Asian','Native American', 'Missing', 'Other','White','Black')) +
-   theme_minimal() +
-    theme(
-      panel.grid.minor = element_blank(), 
-      panel.grid.major.x = element_blank(),
-      plot.title = element_text(hjust = 0.5),
-      text=element_text(size=20)
-      ) # Center title and angle x-axis text
+  scale_y_continuous(breaks = seq(0, max(combined_race_count$race_count)+200, by = 200)) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(), 
+    panel.grid.major.x = element_blank(),
+    plot.title = element_text(hjust = 0.5,size = 20),
+    axis.text.x = element_text(angle = 30, hjust = 1),  # Rotate x-axis labels
+    text = element_text(size = 18)
+  )
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+race_levels <- c(-1, 1, 2, 3, 4, 5)
+race_labels <- c("Missing", "White", "Blck", "Asian", "AmInd", "Other")
+combined_data_filtered$f1h3_factor <- factor(combined_data_filtered$f1h3, levels = race_levels, labels = race_labels)
+
+combined_race_count <- combined_data_filtered %>%
+  group_by(f1h3_factor, cf2md_case_lib) %>%
+  summarize(race_count = n(), .groups = 'drop')  # Ensure .groups='drop' to avoid group data frame output
+
+colors <- c(...)  # Ensure this variable is defined with appropriate color values
+
+ggplot(combined_race_count, aes(x = reorder(f1h3_factor, race_count), y = race_count, fill = cf2md_case_lib)) +
+  geom_col(width = 0.7) +  # Adjust width here for spacing between bars
+  labs(title = "Distribution of Father's Race", 
+       x = "Race",
+       y = "Frequency") +
+  scale_fill_manual(values = colors, name = "Depression") +
+  scale_y_continuous(breaks = seq(0, max(combined_race_count$race_count), by = 10)) + # Adjust breaks as needed
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(), 
+    panel.grid.major.x = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels
+    text = element_text(size = 20)
+  )
 ```
 
