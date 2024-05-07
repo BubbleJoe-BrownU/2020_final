@@ -453,41 +453,53 @@ ggplot(combined_data_filtered, aes(x = cf2md_case_lib,
 # plot histogram of log of income to poverty threshold ratio
 combined_data_filtered <- mutate(combined_data_filtered, log_cf2povco = log(cf2povco))
 
-ggplot(combined_data_filtered, aes(x = log_cf2povco)) + 
-    geom_histogram(bins = 20,  fill = "#08519c") +
-    labs(title = "Distribution of Househole Income to Poverty Threshold Ratio", 
+ggplot(combined_data_filtered, aes(x = log_cf2povco, fill = cf2md_case_lib)) + 
+    geom_histogram(bins = 20) +
+    labs(title = "Distribution of Household Income to Poverty Threshold Ratio", 
          y = "Frequency",
-         x = "log(Househole Income to Poverty Threshold Ratio)") +
+         x = "log(Household Income to Poverty Threshold Ratio)") +
+  scale_fill_manual(values = colors,
+                    name = 'Depression') +
    theme_minimal() +
     theme(
       panel.grid.minor = element_blank(), 
       panel.grid.major.x = element_blank(),
-      plot.title = element_text(hjust = 0.5)) # Center title and angle x-axis text
+      text=element_text(size=14),
+   plot.title = element_text(hjust = 0.5, size = 20),  # Larger title
+    axis.title.x = element_text(size = 20),            # Larger X axis label
+    axis.title.y = element_text(size = 20),            # Larger Y axis label
+    axis.text.x = element_text(size = 20),             # Larger X axis text
+    axis.text.y = element_text(size = 20),             # Larger Y axis text
+    legend.position = "none")
+      ) # Center title and angle x-axis text
 ```
 
 ```{r}
 # plot distribution of race:
 
+
 race_levels <- c(-1,1,2,3,4,5)
 race_labels <- c("Missing", "White", "Blck", "Asian", "AmInd", "Other") 
 combined_data_filtered$f1h3_factor <- factor(combined_data_filtered$f1h3, levels = race_levels, labels = race_labels)
 
-combined_face_count <- combined_data_filtered %>%
-  group_by(f1h3_factor) %>%
+combined_race_count <- combined_data_filtered %>%
+  group_by(f1h3_factor,cf2md_case_lib) %>%
   summarize(race_count = n())
 
-ggplot(combined_face_count, aes(x = reorder(f1h3_factor, race_count), y = race_count, fill = reorder(f1h3_factor, race_count))) +
+ggplot(combined_race_count, aes(x = reorder(f1h3_factor, race_count), y = race_count, fill = cf2md_case_lib)) +
   geom_col() + 
   labs(title = "Distribution of Father's Race", 
          x = "Race",
          y = "Frequency") +
-  scale_fill_manual(values = c('#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b')) +
+  scale_fill_manual(values = colors,
+                    name = 'Depression') + #,'#4292c6','#2171b5','#08519c','#08306b')) +
+  scale_x_discrete(labels = c('Asian','Native American', 'Missing', 'Other','White','Black')) +
    theme_minimal() +
     theme(
       panel.grid.minor = element_blank(), 
       panel.grid.major.x = element_blank(),
       plot.title = element_text(hjust = 0.5),
-      legend.position = "none"
+      text=element_text(size=20)
       ) # Center title and angle x-axis text
 ```
 
